@@ -14,7 +14,7 @@ void mandelmovie(int children, imgRawImage* img[50], double xmin, double xmax, d
 	if (children == 1) {
 		int index = 0;
 		for (int i = 0; i < 50; i++) {
-			compute_image(img[index], xmin-index, xmax+index, ymin-index, ymax+index, max);
+			compute_image(img[index], xmin+index, xmax-index, ymin+index, ymax-index, max);
 			index++;
 		}
 	} else {
@@ -26,15 +26,15 @@ void mandelmovie(int children, imgRawImage* img[50], double xmin, double xmax, d
 		if (50 % children == 0) {
 			while (processes_finished < children) {
 				for (int i = 0; i < children - 1; i++) {
-					if (pids[i] > 0) {
+					if (pids[i] == 0) {
 						for (int j = (img_per_child*processes_finished)+1; j < img_per_child*(processes_finished+1); j++) {
-							compute_image(img[index], xmin-index, xmax+index, ymin-index, ymax+index, max);
+							compute_image(img[index], xmin+index, xmax-index, ymin+index, ymax-index, max);
 							index++;
 						}
 						processes_finished++;
-					} else if (pids[children - 2] == 0) { // checks the last child
+					} else if (pids[children - 2] > 0) { // checks the last child
 						for (int j = (img_per_child*processes_finished)+1; j < img_per_child*(processes_finished+1); j++) {
-							compute_image(img[index], xmin-index, xmax+index, ymin-index, ymax+index, max);
+							compute_image(img[index], xmin+index, xmax-index, ymin+index, ymax-index, max);
 							index++;
 						}
 						processes_finished++;
@@ -45,16 +45,18 @@ void mandelmovie(int children, imgRawImage* img[50], double xmin, double xmax, d
 			int remainder = 50 % children;
 			while (processes_finished < children) {
 				for (int i = 0; i < children - 1; i++) {
-					if (pids[i] > 0) {
+					if (pids[i] == 0) {
 						for (int j = (img_per_child*processes_finished)+1; j < img_per_child*(processes_finished+1); j++) {
-							compute_image(img[index], xmin-index, xmax+index, ymin-index, ymax+index, max);
+							compute_image(img[index], xmin+index, xmax-index, ymin+index, ymax-index, max);
 							index++;
 						}
 						processes_finished++;
-					} else if (pids[children - 2] == 0) { // checks the last child
+					} else if (pids[children - 2] > 0) { // checks the last child
 						for (int j = (img_per_child*processes_finished)+1; j < img_per_child*(processes_finished+1) + remainder; j++) {
-							compute_image(img[index], xmin-index, xmax+index, ymin-index, ymax+index, max);
-							index++;
+							if (index < 50) {
+								compute_image(img[index], xmin+index, xmax-index, ymin+index, ymax-index, max);
+								index++;
+							}
 						}
 						processes_finished++;
 					}
@@ -71,7 +73,7 @@ void get_pids(int pids[], int children) {
 		int pids_needed = children - 1;
 		int pid_count = 1;
 		while (pid_count < pids_needed) {
-			if (pids[pid_count-1] == 0) {
+			if (pids[pid_count-1] > 0) {
 				pids[pid_count] = fork();
 				pid_count++;
 			}
