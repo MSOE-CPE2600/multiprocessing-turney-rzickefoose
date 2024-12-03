@@ -1,8 +1,8 @@
 /***************************************************************** 
-* Filename: 
-* Description: 
+* Filename: mandel.h
+* Description: Header file for mandel.h
 * Author: Rose Zickefoose
-* Date: 
+* Date: 11/21/2024
 * Note (Compile Instructions): 
 *****************************************************************/
 

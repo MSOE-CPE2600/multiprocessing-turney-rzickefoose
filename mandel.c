@@ -108,10 +108,8 @@ int main( int argc, char *argv[] ) {
 	return 0;
 }
 
-
 // Show help message
-void show_help()
-{
+void show_help() {
 	printf("Use: mandel [options]\n");
 	printf("Where options are:\n");
 	printf("-m <max>    The maximum number of iterations per point. (default=1000)\n");

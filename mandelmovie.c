@@ -1,83 +1,115 @@
 /***************************************************************** 
-* Filename: 
-* Description: 
+* Filename: mandelmovie.c
+* Description: Creates 50 images using multiprocessing
 * Author: Rose Zickefoose
-* Date: 
-* Note (Compile Instructions): 
+* Date: 11/21/2024
+* Note (Compile Instructions): make
 *****************************************************************/
 
 #include "mandelmovie.h"
-
+#include <stdio.h>
+#include <semaphore.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <unistd.h>
 
 void mandelmovie(int children, imgRawImage* img[50], double xmin, double xmax, double ymin, double ymax, int max) {
 	if (children == 1) {
 		int index = 0;
 		for (int i = 0; i < 50; i++) {
-			compute_image(img[index], xmin+index, xmax-index, ymin+index, ymax-index, max);
-			index++;
+			if (index < 50) {
+				compute_image(img[index], xmin-(index), xmax+(index), ymin-(index), ymax+(index), max);
+				printf("Image %d finished\n", index);
+				index++;
+			}
 		}
 	} else {
-		int pids[children - 1];
-		get_pids(pids, children);
-		int processes_finished = 0;
-		int img_per_child = 50 / children;
-		int index = 0;
-		if (50 % children == 0) {
-			while (processes_finished < children) {
-				for (int i = 0; i < children - 1; i++) {
-					if (pids[i] == 0) {
-						for (int j = (img_per_child*processes_finished)+1; j < img_per_child*(processes_finished+1); j++) {
-							compute_image(img[index], xmin+index, xmax-index, ymin+index, ymax-index, max);
-							index++;
-						}
-						processes_finished++;
-					} else if (pids[children - 2] > 0) { // checks the last child
-						for (int j = (img_per_child*processes_finished)+1; j < img_per_child*(processes_finished+1); j++) {
-							compute_image(img[index], xmin+index, xmax-index, ymin+index, ymax-index, max);
-							index++;
-						}
-						processes_finished++;
-					}
-				}
-			}
-		} else {
-			int remainder = 50 % children;
-			while (processes_finished < children) {
-				for (int i = 0; i < children - 1; i++) {
-					if (pids[i] == 0) {
-						for (int j = (img_per_child*processes_finished)+1; j < img_per_child*(processes_finished+1); j++) {
-							compute_image(img[index], xmin+index, xmax-index, ymin+index, ymax-index, max);
-							index++;
-						}
-						processes_finished++;
-					} else if (pids[children - 2] > 0) { // checks the last child
-						for (int j = (img_per_child*processes_finished)+1; j < img_per_child*(processes_finished+1) + remainder; j++) {
-							if (index < 50) {
-								compute_image(img[index], xmin+index, xmax-index, ymin+index, ymax-index, max);
-								index++;
-							}
-						}
-						processes_finished++;
-					}
-				}
-			}
+		// Creating Shared Memory for processes (for index)
+		int shmid;
+		key_t key = ftok("shmfile", 65);
+		shmid = shmget(key, 1024, IPC_CREAT | 0666);
+		if (shmid < 0) {
+			perror("shmget");
+			exit(1);
 		}
-	}
-}
+		int *index_ptr = (int*)shmat(shmid, NULL, 0);
+		memset(index_ptr, 0, 1024);
 
-void get_pids(int pids[], int children) {
-	// Forks to get 2 initial children
-	pids[0] = fork();
-	if (children > 2) {
+		// Creates Shared Memory with the image array
+		imgRawImage** img_ptr;
+		int fd = shm_open("/my_shared_memory", O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
+		if (fd == -1) {
+			perror("shm_open");
+			exit(1);
+		}
+
+		if (ftruncate(fd, 50 * sizeof(imgRawImage*)) < 0) {
+			perror("ftruncate");
+			exit(1);
+		}
+
+		img_ptr = (imgRawImage**)mmap(NULL, 50 * sizeof(imgRawImage*), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+		if (img_ptr == MAP_FAILED) {
+			perror("mmap");
+			exit(1);
+		}
+
+		// Creating Semaphores for processes
+		sem_t sem;
+		sem_init(&sem, children, 1);
+
+		// Creating Children processes
 		int pids_needed = children - 1;
-		int pid_count = 1;
-		while (pid_count < pids_needed) {
-			if (pids[pid_count-1] > 0) {
-				pids[pid_count] = fork();
-				pid_count++;
+		int pid = fork();
+		pids_needed--;
+		while (pids_needed > children) { // gets the needed processes
+			if (pid != 0) {
+				fork();
+				pids_needed--;
 			}
 		}
+
+		memcpy(img_ptr, img, 50 * sizeof(imgRawImage*));
+
+		// Creating images
+		for (int i = 0; i < 50; i++) {
+			if (*index_ptr < 50) {
+				if (pid == 0) {
+					sem_wait(&sem);
+					compute_image(*(img_ptr+(*index_ptr)), xmin-(*index_ptr), xmax+(*index_ptr), ymin-(*index_ptr), ymax+(*index_ptr), max);
+					sem_post(&sem);
+					sem_wait(&sem);
+					printf("Image %d finished\n", (*index_ptr)++);
+					usleep(1000);
+					sem_post(&sem);
+				}
+			}
+		}
+
+		memcpy(img, img_ptr, 50 * sizeof(imgRawImage*));
+
+		// Detaches Shared Memory
+		shmdt(index_ptr);
+		munmap(img_ptr, 50 * sizeof(imgRawImage*));
+
+		// Closes Shared Memory Object
+		close(fd);
+
+		// Removes Shared Memory
+		shmctl(shmid, IPC_RMID, NULL);
+		shm_unlink("/my_shared_memory");
+
+		// Destroys the semaphore
+		sem_destroy(&sem);
 	}
 }
 
