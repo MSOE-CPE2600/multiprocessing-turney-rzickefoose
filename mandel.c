@@ -8,7 +8,6 @@
 ///
 #include "mandel.h"
 #include <stdlib.h>
-#include <string.h>
 
 #include "mandelmovie.h"
 
@@ -26,12 +25,13 @@ int main( int argc, char *argv[] ) {
 	int    image_height = 1000;
 	int    max = 1000;
 	int children = 1;
+	int threads = 1;
 
 	// For each command line argument given,
 	// override the appropriate configuration value.
 
-	while((c = getopt(argc,argv,"x:y:s:W:H:m:o:c:h"))!=-1) {
-		switch(c) 
+	while((c = getopt(argc,argv,"x:y:s:W:H:m:o:c:t:h"))!=-1) {
+		switch(c)
 		{
 			case 'x':
 				xcenter = atof(optarg);
@@ -56,6 +56,9 @@ int main( int argc, char *argv[] ) {
 			break;
 			case 'c':
 				children = atoi(optarg);
+			break;
+			case 't':
+				threads = atoi(optarg);
 			break;
 			case 'h':
 				show_help();
@@ -85,20 +88,7 @@ int main( int argc, char *argv[] ) {
 	// Compute the Mandelbrot image
 	compute_image(img,xcenter-xscale/2,xcenter+xscale/2,ycenter-yscale/2,ycenter+yscale/2,max);
 	*/
-	mandelmovie(children, img,xcenter-xscale/2,xcenter+xscale/2,ycenter-yscale/2,ycenter+yscale/2,max);
-
-
-	/* CHANGE TO FOR LOOP OF AN ARRAY OF IMAGES */
-	// Save the image in the stated file.
-	for (int i = 0; i < 50; i++) {
-		char file_number[100];
-		sprintf(file_number,"%d",i);
-		char outfile[100];
-		strcpy(outfile,outfile_start);
-		strcat(outfile,file_number);
-		strcat(outfile,".jpg");
-		storeJpegImageFile(img[i],outfile);
-	}
+	mandelmovie(children, img,xcenter-xscale/2,xcenter+xscale/2,ycenter-yscale/2,ycenter+yscale/2,max,threads);
 
 	// free the mallocs
 	for (int i = 0; i < 50; i++) {
